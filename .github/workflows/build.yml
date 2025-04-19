@@ -23,10 +23,10 @@ jobs:
         pip install PySimpleGUI pyinstaller git+https://github.com/bkerler/mtkclient.git
 
     - name: Build EXE
-      run: pyinstaller --onefile --windowed flash_tool.py
+      run: pyinstaller --onefile --windowed Alkhazem_tool.py
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: flash_tool_exe
-        path: dist/flash_tool.exe
+        name: Alkhazem_tool_exe
+        path: dist/Alkhazem_tool.exe
