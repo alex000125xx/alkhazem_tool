@@ -1,50 +1,102 @@
-import subprocess, threading
+#!/usr/bin/env python3
+import subprocess
+import threading
+import time
 import PySimpleGUI as sg
 
-sg.theme('DarkBlue')
+# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# 1) ثيم الواجهة مع دعم الإصدارات القديمة من PySimpleGUI
+# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+try:
+    sg.theme('DarkBlue')
+except AttributeError:
+    sg.ChangeLookAndFeel('DarkBlue')
 
+# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# 2) واجهة المستخدم
+# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 layout = [
     [sg.Text('Boot.img:'), sg.Input(key='-BOOT-'), sg.FileBrowse(file_types=(('IMG Files','*.img'),))],
-    [sg.Text('Relock.img:'), sg.Input(key='-RELOCK-'), sg.FileBrowse(file_types=(('IMG Files','*.img'),))],
+    [sg.Text('Relock Boot.img:'), sg.Input(key='-RELOCK-'), sg.FileBrowse(file_types=(('IMG Files','*.img'),))],
     [sg.Button('Flash Boot'), sg.Button('Flash Relock')],
-    [sg.ProgressBar(100, orientation='h', size=(40,20), key='-PROG-')],
+    [sg.ProgressBar(100, orientation='h', size=(40, 20), key='-PROG-')],
     [sg.Multiline(size=(60,10), key='-OUT-')]
 ]
-
 window = sg.Window('MTK Flash Tool', layout)
 
+# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# 3) دوال مساعدة
+# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 def log(msg):
     window['-OUT-'].print(msg)
 
 def run_fastboot(cmd_list, start, end):
     log(f'>> {" ".join(cmd_list)}')
-    try:
-        proc = subprocess.Popen(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        for line in proc.stdout:
-            log(line.strip())
-        proc.wait()
-        window['-PROG-'].update(end if proc.returncode==0 else start)
-    except Exception as e:
-        log(f'Error: {e}')
+    window['-PROG-'].update(start)
+    proc = subprocess.Popen(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    for line in proc.stdout:
+        log(line.strip())
+    proc.wait()
+    if proc.returncode == 0:
+        window['-PROG-'].update(end)
+        log('✔ نجاح')
+    else:
+        log('✖ فشل')
 
+def wait_brom():
+    """ينتظر حتى يظهر الجهاز في وضع BROM عبر mtkclient"""
+    log('– انتظر وضع BROM (وصل الجهاز + اضغط Power+Volume Up)...')
+    window['-PROG-'].update(5)
+    while True:
+        res = subprocess.run(
+            ['mtkclient', 'detect'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        if res.returncode == 0:
+            log(res.stdout.strip())
+            window['-PROG-'].update(20)
+            break
+        time.sleep(1)
+
+# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# 4) إجراءات الفلاش
+# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 def flash_boot(path):
-    window['-PROG-'].update(5); log('– وضع Fastboot...')
-    run_fastboot(['fastboot','flashing','unlock'],5,20)
-    run_fastboot(['fastboot','flash','boot', path],20,80)
-    run_fastboot(['fastboot','reboot'],80,100)
+    wait_brom()
+    run_fastboot(['fastboot', 'flashing', 'unlock'], 20, 30)
+    run_fastboot(['fastboot', 'flash', 'boot', path], 30, 90)
+    run_fastboot(['fastboot', 'reboot'], 90, 100)
 
 def flash_relock(path):
-    window['-PROG-'].update(5); log('– وضع Fastboot...')
-    run_fastboot(['fastboot','flash','boot', path],5,80)
-    run_fastboot(['fastboot','flashing','lock'],80,95)
-    run_fastboot(['fastboot','reboot'],95,100)
+    wait_brom()
+    run_fastboot(['fastboot', 'flash', 'boot', path], 20, 90)
+    run_fastboot(['fastboot', 'flashing', 'lock'], 90, 95)
+    run_fastboot(['fastboot', 'reboot'], 95, 100)
 
+# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# 5) حلقة الأحداث
+# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 while True:
     event, values = window.read()
-    if event==sg.WIN_CLOSED: break
-    if event=='Flash Boot' and values['-BOOT-']:
-        threading.Thread(target=flash_boot, args=(values['-BOOT-'],), daemon=True).start()
-    if event=='Flash Relock' and values['-RELOCK-']:
-        threading.Thread(target=flash_relock, args=(values['-RELOCK-'],), daemon=True).start()
+    if event == sg.WIN_CLOSED:
+        break
+
+    if event == 'Flash Boot':
+        p = values['-BOOT-']
+        if not p:
+            log('❗ اختر ملف boot.img أولاً')
+        else:
+            window['-PROG-'].update(0)
+            threading.Thread(target=flash_boot, args=(p,), daemon=True).start()
+
+    if event == 'Flash Relock':
+        p = values['-RELOCK-']
+        if not p:
+            log('❗ اختر ملف boot.img أولاً')
+        else:
+            window['-PROG-'].update(0)
+            threading.Thread(target=flash_relock, args=(p,), daemon=True).start()
 
 window.close()
