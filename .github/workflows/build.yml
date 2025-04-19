@@ -20,7 +20,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install PySimpleGUI pyinstaller git+https://github.com/bkerler/mtkclient.git
+        pip install PySimpleGUI pyinstaller \
+                    git+https://github.com/bkerler/mtkclient.git
 
     - name: Build EXE
       run: pyinstaller --onefile --windowed Alkhazem_tool.py
@@ -28,5 +29,5 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Alkhazem_tool_exe
+        name: alkhazem_tool_exe
         path: dist/Alkhazem_tool.exe
